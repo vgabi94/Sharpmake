@@ -5,6 +5,7 @@
 *.sln
 *.csproj
 # but negate for the following, mandatorily versionned
+!Sharpmake.sln
 !Sharpmake/Sharpmake.csproj
 !Sharpmake.Application/Sharpmake.Application.csproj
 !Sharpmake.Generators/Sharpmake.Generators.csproj
