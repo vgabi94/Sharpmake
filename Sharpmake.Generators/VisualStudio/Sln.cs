@@ -384,6 +384,28 @@ namespace Sharpmake.Generators.VisualStudio
                 }
             }
 
+            // Write extra solution items
+            // TODO: What happens if we define an existing folder?
+            foreach (var items in solution.ExtraItems)
+            {
+                using (fileGenerator.Declare("folderName", items.Key))
+                using (fileGenerator.Declare("folderGuid", Util.BuildGuid(items.Key)))
+                using (fileGenerator.Declare("solution", solution))
+                {
+                    fileGenerator.Write(Template.Solution.ProjectFolder);
+                    {
+                        fileGenerator.Write(Template.Solution.SolutionItemBegin);
+                        foreach (string file in items.Value)
+                        {
+                            using (fileGenerator.Declare("solutionItemPath", file))
+                                fileGenerator.Write(Template.Solution.SolutionItem);
+                        }
+                        fileGenerator.Write(Template.Solution.ProjectSectionEnd);
+                    }
+                    fileGenerator.Write(Template.Solution.ProjectEnd);
+                }
+            }
+
             fileGenerator.Write(Template.Solution.GlobalBegin);
 
             // Write source code control informations
@@ -540,7 +562,7 @@ namespace Sharpmake.Generators.VisualStudio
                     string category;
                     if (solution.MergePlatformConfiguration)
                     {
-                        configurationName = solutionConfiguration.PlatformName + " " + solutionConfiguration.Name;
+                        configurationName = solutionConfiguration.PlatformName + "-" + solutionConfiguration.Name;
                         category = "All Platforms";
                     }
                     else

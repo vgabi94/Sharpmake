@@ -50,6 +50,9 @@ namespace Sharpmake
         // Experimental! Create solution dependencies from the FastBuild projects outputting Exe to the FastBuildAll project, to fix "F5" behavior in visual studio http://www.fastbuild.org/docs/functions/vssolution.html
         public bool FastBuildAllSlnDependencyFromExe = false;
 
+        // For adding additional files/folders to the solution
+        public Dictionary<string, Strings> ExtraItems = new Dictionary<string, Strings>();
+
         private string _perforceRootPath = null;
         public string PerforceRootPath
         {
@@ -57,7 +60,6 @@ namespace Sharpmake
             set { SetProperty(ref _perforceRootPath, value); }
         }
 
-        // TODO: currently broken
         private bool _mergePlatformConfiguration = false;
         public bool MergePlatformConfiguration
         {
@@ -76,12 +78,17 @@ namespace Sharpmake
 
         public Solution()
         {
-            Initialize(typeof(Target));
+            Initialize(typeof(Target), typeof(Solution.Configuration));
         }
 
         public Solution(Type targetType)
         {
-            Initialize(targetType);
+            Initialize(targetType, typeof(Solution.Configuration));
+        }
+
+        public Solution(Type targetType, Type configurationType)
+        {
+            Initialize(targetType, configurationType);
         }
 
         #region Internal
@@ -137,7 +144,9 @@ namespace Sharpmake
             if (!_dependenciesResolved)
                 throw new InternalError("Solution not resolved: {0}", GetType().FullName);
             projectsWereFiltered = false;
-            List<ResolvedProject> result = new List<ResolvedProject>();
+            var result = new Dictionary<string, ResolvedProject>();
+
+            Dictionary<Project.Configuration, ResolvedProject> configurationsToProjects = new Dictionary<Project.Configuration, ResolvedProject>();
 
             foreach (Configuration solutionConfiguration in solutionConfigurations)
             {
@@ -149,53 +158,50 @@ namespace Sharpmake
                         continue;
                     }
 
-                    ResolvedProject resolvedProject = result.Find(p => p.OriginalProjectFile == includedProjectInfo.Configuration.ProjectFullFileName);
-                    if (resolvedProject == null)
-                    {
-                        resolvedProject = new ResolvedProject
+                    ResolvedProject resolvedProject = result.GetValueOrAdd(
+                        includedProjectInfo.Configuration.ProjectFullFileName,
+                        new ResolvedProject
                         {
                             Project             = includedProjectInfo.Project,
                             TargetDefault       = includedProjectInfo.Target,
                             OriginalProjectFile = includedProjectInfo.Configuration.ProjectFullFileName,
                             ProjectFile         = Util.GetCapitalizedPath(includedProjectInfo.Configuration.ProjectFullFileNameWithExtension),
                             ProjectName         = includedProjectInfo.Configuration.ProjectName
-                        };
-                        result.Add(resolvedProject);
-                    }
+                        }
+                    );
 
                     resolvedProject.Configurations.Add(includedProjectInfo.Configuration);
+
+                    if(!configurationsToProjects.ContainsKey(includedProjectInfo.Configuration))
+                        configurationsToProjects[includedProjectInfo.Configuration] = resolvedProject;
                 }
             }
 
 
-            foreach (ResolvedProject resolvedProject in result)
+            foreach (ResolvedProject resolvedProject in result.Values)
             {
-                // Folder must all be the same for all config, else will be emptied.
-                foreach (Project.Configuration projectConfiguration in resolvedProject.Configurations)
-                {
-                    if (resolvedProject.SolutionFolder == null)
-                        resolvedProject.SolutionFolder = projectConfiguration.SolutionFolder;
-                    else if (resolvedProject.SolutionFolder != projectConfiguration.SolutionFolder)
-                        resolvedProject.SolutionFolder = "";
-                }
-
                 foreach (Project.Configuration resolvedProjectConf in resolvedProject.Configurations)
                 {
+                    // Folder must all be the same for all config, else will be emptied.
+                    if (resolvedProject.SolutionFolder == null)
+                        resolvedProject.SolutionFolder = resolvedProjectConf.SolutionFolder;
+                    else if (resolvedProject.SolutionFolder != resolvedProjectConf.SolutionFolder)
+                        resolvedProject.SolutionFolder = "";
+
                     foreach (Project.Configuration dependencyConfiguration in resolvedProjectConf.ResolvedDependencies)
                     {
-                        foreach (ResolvedProject resolvedProjectToAdd in result)
+                        if (configurationsToProjects.ContainsKey(dependencyConfiguration))
                         {
-                            if (resolvedProjectToAdd.Configurations.Contains(dependencyConfiguration))
-                            {
-                                if (!resolvedProject.Dependencies.Contains(resolvedProjectToAdd))
-                                    resolvedProject.Dependencies.Add(resolvedProjectToAdd);
-                            }
+                            var resolvedProjectToAdd = configurationsToProjects[dependencyConfiguration];
+
+                            if (!resolvedProject.Dependencies.Contains(resolvedProjectToAdd))
+                                resolvedProject.Dependencies.Add(resolvedProjectToAdd);
                         }
                     }
                 }
             }
 
-            return result;
+            return result.Values;
         }
 
         internal HashSet<Type> GetDependenciesProjectTypes()
@@ -391,8 +397,14 @@ namespace Sharpmake
         private bool _resolved = false;
         private bool _dependenciesResolved = false;
 
-        private void Initialize(Type targetType)
+        private void Initialize(Type targetType, Type configurationType)
         {
+            var expectedType = typeof(Solution.Configuration);
+            if (configurationType == null || (configurationType != expectedType && !configurationType.IsSubclassOf(expectedType)))
+                throw new InternalError("configuration type {0} must be a subclass of {1}", targetType.FullName, expectedType.FullName);
+
+            ConfigurationType = configurationType;
+
             ClassName = GetType().Name;
             Targets.Initialize(targetType);
 

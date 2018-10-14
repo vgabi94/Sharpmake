@@ -268,9 +268,19 @@ namespace Sharpmake
             public string ManifestFileSuffix = ".intermediate.manifest";
 
             /// <summary>
+            /// Prefix for compiled embedded resource files
+            /// </summary>
+            public string EmbeddedResourceOutputPrefix = string.Empty;
+
+            /// <summary>
             /// Intermediate devEnv directory 
             /// </summary>
             public string IntermediatePath = "[conf.ProjectPath]" + Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar + "[target.Platform]" + Path.DirectorySeparatorChar + "[target.Name]";
+
+            /// <summary>
+            /// Base Intermediate devEnv directory. Only used in csproj
+            /// </summary>
+            public string BaseIntermediateOutputPath = string.Empty;
 
             /// <summary>
             /// Compiler defines, the generator may add some if needed for platform/target
@@ -515,6 +525,12 @@ namespace Sharpmake
                 set { _blobPath = value; }
             }
 
+            /// <summary>
+            // How many static blob files would this configuration generate
+            /// </summary>
+            ///
+            internal int GeneratableBlobCount = 0;
+
             string _fastBuildUnityPath = null;
             public string FastBuildUnityPath
             {
@@ -586,6 +602,34 @@ namespace Sharpmake
                 public string ExecutableOtherArguments = "";
                 public string ExecutableWorkingDirectory = "";
                 public bool FastBuildUseStdOutAsOutput = false;
+            }
+
+            [Resolver.Resolvable]
+            public class BuildStepTest : BuildStepBase
+            {
+                public BuildStepTest(
+                    string executableFile,
+                    string executableArguments,
+                    string outputFile,
+                    string executableWorkingDirectory = "",
+                    int timeOutInSecond = 0,
+                    bool alwaysShowOutput = true)
+
+                {
+                    TestExecutable = executableFile;
+                    TestArguments = executableArguments;
+                    TestOutput = outputFile;
+                    TestWorkingDir = executableWorkingDirectory;
+                    TestTimeOutInSecond = timeOutInSecond;
+                    TestAlwaysShowOutput = alwaysShowOutput;
+                }
+
+                public string TestExecutable = "";
+                public string TestOutput = "";
+                public string TestArguments = "";
+                public string TestWorkingDir = "";
+                public int TestTimeOutInSecond = 0;
+                public bool TestAlwaysShowOutput = false;
             }
 
             public class FileCustomBuild
@@ -708,6 +752,34 @@ namespace Sharpmake
                 }
             }
 
+            /// <summary>
+            /// Settings for NMake projects with custom execution
+            /// </summary>
+            public class NMakeBuildSettings
+            {
+
+                public string BuildCommand = RemoveLineTag;
+                public string RebuildCommand = RemoveLineTag;
+                public string CleanCommand = RemoveLineTag;
+                public string OutputFile = RemoveLineTag;
+
+                public bool IsResolved { get; private set; } = false;
+
+                internal void Resolve(Resolver resolver)
+                {
+                    if (IsResolved)
+                        return;
+
+                    BuildCommand = resolver.Resolve(BuildCommand);
+                    RebuildCommand = resolver.Resolve(RebuildCommand);
+                    CleanCommand = resolver.Resolve(CleanCommand);
+                    OutputFile = resolver.Resolve(OutputFile);
+
+                    IsResolved = true;
+                }
+            }
+            public NMakeBuildSettings CustomBuildSettings = null;
+
 
             /// <summary>
             /// If specified, every obj will be outputed in intermediate directories corresponding to sources hierarchy
@@ -758,6 +830,7 @@ namespace Sharpmake
             public Dictionary<string, BuildStepBase> EventCustomPostBuildExecute = new Dictionary<string, BuildStepBase>();
             public HashSet<KeyValuePair<string, string>> EventPostBuildCopies = new HashSet<KeyValuePair<string, string>>(); // <path to file, destination folder>
             public BuildStepExecutable PostBuildStampExe = null;
+            public BuildStepTest PostBuildStepTest = null;
 
             public List<string> CustomBuildStep = new List<string>();
             public string CustomBuildStepDescription = "";
@@ -1097,6 +1170,12 @@ namespace Sharpmake
                     Util.ResolvePath(Project.SourceRootPath, ref customFileBuildStep.AdditionalInputs);
                 }
 
+                if(CustomBuildSettings != null)
+                {
+                    CustomBuildSettings.Resolve(resolver);
+                    Util.ResolvePath(Project.SourceRootPath, ref CustomBuildSettings.OutputFile);
+                }
+
                 foreach (var eventDictionary in new[]{
                     EventPreBuildExecute,
                     EventCustomPrebuildExecute,
@@ -1110,6 +1189,9 @@ namespace Sharpmake
 
                 if(PostBuildStampExe != null)
                     PostBuildStampExe.Resolve(resolver);
+
+                if (PostBuildStepTest != null)
+                    PostBuildStepTest.Resolve(resolver);
 
                 string dependencyExtension = Util.GetProjectFileExtension(this);
                 ProjectFullFileNameWithExtension = ProjectFullFileName + dependencyExtension;
@@ -1349,6 +1431,9 @@ namespace Sharpmake
             public Strings ConditionalReferencesByPath = new Strings();
             public Strings ForceUsingFiles = new Strings();
 
+            public Strings CustomPropsFiles = new Strings();  // vs2010+ .props files
+            public Strings CustomTargetsFiles = new Strings();  // vs2010+ .targets files
+
             // NuGet packages (only C# for now)
             public PackageReferences ReferencesByNuGetPackage = new PackageReferences();
 
@@ -1411,6 +1496,7 @@ namespace Sharpmake
                 public string StartArguments = RemoveLineTag;
                 public string WorkingDirectory = RemoveLineTag;
                 public bool OverwriteExistingFile = true;
+                public bool EnableUnmanagedDebug = false;
             }
             public CsprojUserFileSettings CsprojUserFile = null;
 

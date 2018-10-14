@@ -183,6 +183,11 @@ namespace Sharpmake
                 throw new Error("Can't override a specific Visual Studio version directory more than once. Version: " + visualVersion);
         }
 
+        public static bool OverridenVisualStudioDir(this DevEnv visualVersion)
+        {
+            return s_visualStudioDirOverrides.ContainsKey(visualVersion);
+        }
+
         public static string GetVisualStudioDir(this DevEnv visualVersion)
         {
             // First check if the visual studio path is overriden from default value.
@@ -269,7 +274,7 @@ namespace Sharpmake
 
             string targetPlatform = (platform == Platform.win64) ? "x64" : "x86";
 
-            var paths = new List<string>();
+            var paths = new Strings();
             paths.Add(visualVersion.GetVisualStudioBinPath(platform));
 
             switch (kitsRoot)
@@ -281,9 +286,22 @@ namespace Sharpmake
                     paths.Add(Path.Combine(KitsRootPaths.GetRoot(KitsRootEnum.KitsRoot81), "bin", targetPlatform));
                     break;
                 case KitsRootEnum.KitsRoot10:
-                    paths.Add(Path.Combine(KitsRootPaths.GetRoot(KitsRootEnum.KitsRoot10), "bin", targetPlatform));
-                    if(KitsRootPaths.GetWindowsTargetPlatformVersionForDevEnv(visualVersion) <= Options.Vc.General.WindowsTargetPlatformVersion.v10_0_10240_0)
-                        paths.Add(Path.Combine(KitsRootPaths.GetRoot(KitsRootEnum.KitsRoot81), "bin", targetPlatform));
+                    {
+                        Options.Vc.General.WindowsTargetPlatformVersion windowsTargetPlatformVersion = KitsRootPaths.GetWindowsTargetPlatformVersionForDevEnv(visualVersion);
+
+                        string kitsRoot10Path = KitsRootPaths.GetRoot(KitsRootEnum.KitsRoot10);
+                        string platformVersion = windowsTargetPlatformVersion.ToVersionString();
+
+                        // Use WindowsSdkVerBinPath (the version specific folder), if it exists
+                        string candidateWindowsSdkVerBinPath = Path.Combine(kitsRoot10Path, "bin", platformVersion, targetPlatform);
+                        if (Util.DirectoryExists(candidateWindowsSdkVerBinPath))
+                            paths.Add(candidateWindowsSdkVerBinPath);
+                        else
+                            paths.Add(Path.Combine(kitsRoot10Path, "bin", targetPlatform));
+
+                        if (windowsTargetPlatformVersion <= Options.Vc.General.WindowsTargetPlatformVersion.v10_0_10240_0)
+                            paths.Add(Path.Combine(KitsRootPaths.GetRoot(KitsRootEnum.KitsRoot81), "bin", targetPlatform));
+                    }
                     break;
                 default:
                     throw new NotImplementedException("No GetWindowsExecutablePath associated with " + kitsRoot);
@@ -307,12 +325,23 @@ namespace Sharpmake
                     return Path.Combine(KitsRootPaths.GetRoot(KitsRootEnum.KitsRoot81), "bin", targetPlatform, "rc.exe");
                 case KitsRootEnum.KitsRoot10:
                     {
-                        string kitsRootPath;
-                        if (KitsRootPaths.GetWindowsTargetPlatformVersionForDevEnv(visualVersion) <= Options.Vc.General.WindowsTargetPlatformVersion.v10_0_10240_0)
-                            kitsRootPath = KitsRootPaths.GetRoot(KitsRootEnum.KitsRoot81);
-                        else
-                            kitsRootPath = KitsRootPaths.GetRoot(KitsRootEnum.KitsRoot10);
-                        return Path.Combine(kitsRootPath, "bin", targetPlatform, "rc.exe");
+                        Options.Vc.General.WindowsTargetPlatformVersion windowsTargetPlatformVersion = KitsRootPaths.GetWindowsTargetPlatformVersionForDevEnv(visualVersion);
+                        if (windowsTargetPlatformVersion <= Options.Vc.General.WindowsTargetPlatformVersion.v10_0_10240_0)
+                        {
+                            string kitsRoot81Path = KitsRootPaths.GetRoot(KitsRootEnum.KitsRoot81);
+                            return Path.Combine(kitsRoot81Path, "bin", targetPlatform, "rc.exe");
+                        }
+
+                        string kitsRoot10Path = KitsRootPaths.GetRoot(KitsRootEnum.KitsRoot10);
+                        string platformVersion = windowsTargetPlatformVersion.ToVersionString();
+
+                        // First, try WindowsSdkVerBinPath
+                        string candidateWindowsSdkVerBinPath = Path.Combine(kitsRoot10Path, "bin", platformVersion, targetPlatform, "rc.exe");
+                        if (File.Exists(candidateWindowsSdkVerBinPath))
+                            return candidateWindowsSdkVerBinPath;
+
+                        // If it didn't contain rc.exe, fallback to WindowsSdkBinPath
+                        return Path.Combine(kitsRoot10Path, "bin", targetPlatform, "rc.exe");
                     }
                 default:
                     throw new NotImplementedException("No WindowsResourceCompiler associated with " + kitsRoot);
@@ -470,6 +499,7 @@ namespace Sharpmake
                 case Options.Vc.General.WindowsTargetPlatformVersion.v10_0_14393_0: return "10.0.14393.0";
                 case Options.Vc.General.WindowsTargetPlatformVersion.v10_0_15063_0: return "10.0.15063.0";
                 case Options.Vc.General.WindowsTargetPlatformVersion.v10_0_16299_0: return "10.0.16299.0";
+                case Options.Vc.General.WindowsTargetPlatformVersion.v10_0_17134_0: return "10.0.17134.0";
                 default:
                     throw new ArgumentOutOfRangeException(windowsTargetPlatformVersion.ToString());
             }

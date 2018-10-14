@@ -300,6 +300,14 @@ namespace Sharpmake
             set { SetProperty(ref _runFromPcDeploymentRegisterCommand, value); }
         }
 
+        // If true, remove the source files from a FastBuild project's associated vcxproj file.
+        private bool _stripFastBuildSourceFiles = true;
+        public bool StripFastBuildSourceFiles
+        {
+            get { return _stripFastBuildSourceFiles; }
+            set { SetProperty(ref _stripFastBuildSourceFiles, value); }
+        }
+
         private IEnumerable<Strings> GetStringFields()
         {
             yield return AdditionalSourceRootPaths;
@@ -338,12 +346,29 @@ namespace Sharpmake
 
         public Project()
         {
-            Initialize(typeof(Target));
+            Initialize(typeof(Target), typeof(Project.Configuration));
         }
 
         public Project(Type targetType)
         {
-            Initialize(targetType);
+            Initialize(targetType, typeof(Project.Configuration));
+        }
+
+        public Project(Type targetType, Type configurationType)
+        {
+            Initialize(targetType, configurationType);
+        }
+
+        /// <summary>
+        /// Special constructor for utility projects generated internally,
+        /// since these projects must handle paths differently
+        /// </summary>
+        /// <param name="targetType"></param>
+        /// <param name="configurationType"></param>
+        /// <param name="isInternal">Indicates if the class is defined within Sharpmake</param>
+        internal Project(Type targetType, Type configurationType, bool isInternal)
+        {
+            Initialize(targetType, configurationType, isInternal);
         }
 
         protected override void PreInvokeConfiguration()
@@ -752,6 +777,8 @@ namespace Sharpmake
                 NatvisFiles.IntersectWith(SourceFilesFilters);
             }
 
+            AdditionalFiltering(SourceFiles, ref SourceFilesExclude);
+
             // Add source files
             ResolvedSourceFiles.AddRange(SourceFiles);
 
@@ -1013,6 +1040,11 @@ namespace Sharpmake
             }
         }
 
+        public virtual void AdditionalFiltering(Strings sourceFiles, ref Strings sourceFilesExclude)
+        {
+
+        }
+
         public virtual bool ResolveFilterPath(string relativePath, out string filterPath)
         {
             filterPath = null;
@@ -1217,7 +1249,15 @@ namespace Sharpmake
             }
 
             // index of nb of blob created
-            BlobCount = allBlobsFiles.Count;
+            int nbBlobCreated = allBlobsFiles.Count;
+            BlobCount = nbBlobCreated;
+
+            // make the number of blobs a conf generates available to generators
+            if (nbBlobCreated > 0)
+            {
+                foreach (Configuration conf in configurations)
+                    conf.GeneratableBlobCount = nbBlobCreated;
+            }
 
             // Capping the number of blob work to the number of blobs. It makes no sense to have more work blobs than blobs.
             if (BlobWorkFileCount > BlobCount)
@@ -1228,7 +1268,7 @@ namespace Sharpmake
             {
                 for (int i = 0; i < allBlobsFiles.Count; ++i)
                 {
-                    string blobFileName = String.Format(@"{0}_{1:000}", Name.ToLower(), i);
+                    string blobFileName = string.Format(@"{0}_{1:000}", Name.ToLower(), i);
                     var blobbedFiles = (isBlobWorkEnabled) ?
                         from j in allBlobsFiles[i] where !j.IsWorkBlobCandidate select j.Path :
                         from j in allBlobsFiles[i] select j.Path;
@@ -1238,10 +1278,10 @@ namespace Sharpmake
                 // write work blob size
                 if (BlobWorkEnabled)
                 {
-                    List<List<String>> workBlobFiles = new List<List<String>>(BlobWorkFileCount);
+                    var workBlobFiles = new List<List<string>>(BlobWorkFileCount);
 
                     for (int i = 0; i < BlobWorkFileCount; ++i)
-                        workBlobFiles.Add(new List<String>());
+                        workBlobFiles.Add(new List<string>());
 
                     foreach (string workkBlobSourceFile in workBlobSourceFiles)
                     {
@@ -1252,7 +1292,7 @@ namespace Sharpmake
 
                     for (int i = 0; i < workBlobFiles.Count; ++i)
                     {
-                        string blobFileName = String.Format(@"{0}_work_{1:000}", Name.ToLower(), i);
+                        string blobFileName = string.Format(@"{0}_work_{1:000}", Name.ToLower(), i);
                         blobFiles.Add(BlobGenerateFile(blobPath, workBlobFiles[i], blobFileName, configurations, WorkBlobFileHeader, WorkBlobFileFooter));
                     }
                 }
@@ -1268,6 +1308,14 @@ namespace Sharpmake
             DotNetReferences = 0x04,
             DotNetExtensions = 0x08,
             Default = DotNetExtensions | ProjectReferences | ExternalReferences,
+        }
+
+        public enum NuGetPackageMode
+        {
+            VersionDefault,
+            PackageConfig,
+            ProjectJson,
+            PackageReference,
         }
 
         #region Internal
@@ -1325,15 +1373,25 @@ namespace Sharpmake
             return null;
         }
 
-        internal void Initialize(Type targetType)
+        internal void Initialize(Type targetType, Type configurationType, bool isInternal = false)
         {
+            var expectedType = typeof(Project.Configuration);
+            if (configurationType == null || (configurationType != expectedType && !configurationType.IsSubclassOf(expectedType)))
+                throw new InternalError("configuration type {0} must be a subclass of {1}", targetType.FullName, expectedType.FullName);
+
+            ConfigurationType = configurationType;
+
             ExtensionBuildTools[".asm"] = "MASM";
             ClassName = GetType().Name;
             FullClassName = GetType().FullName;
             Targets.Initialize(targetType);
 
             string file;
-            if (Util.GetStackSourceFileTopMostTypeOf(GetType(), out file))
+            if(isInternal)
+            {
+                SharpmakeCsPath = Util.PathMakeStandard(AppDomain.CurrentDomain.BaseDirectory);
+            }
+            else if (Util.GetStackSourceFileTopMostTypeOf(GetType(), out file))
             {
                 FileInfo fileInfo = new FileInfo(file);
                 SharpmakeCsFileName = Util.PathMakeStandard(fileInfo.FullName);
@@ -1492,7 +1550,11 @@ namespace Sharpmake
 
             Resolver resolver = new Resolver();
             resolver.SetParameter("project", this);
-            resolver.Resolve(this, skipInvalidPath);
+
+            if (skipInvalidPath)
+                resolver.Resolve(this, fallbackValue: false);
+            else
+                resolver.Resolve(this);
 
             // Resolve full paths
             _rootPath = Util.SimplifyPath(RootPath);
@@ -1642,9 +1704,9 @@ namespace Sharpmake
     internal class FastBuildAllProject : Project
     {
         public FastBuildAllProject(Type targetType)
-            : base(targetType)
+            : base(targetType, typeof(Project.Configuration), true)
         {
-            // disable automatic source files discovery
+            // Disable automatic source files discovery
             SourceFilesExtensions.Clear();
             ResourceFilesExtensions.Clear();
             PRIFilesExtensions.Clear();
@@ -1706,6 +1768,40 @@ namespace Sharpmake
         public bool Visible;
         public string ProductName;
         public bool Install;
+    }
+
+    public class FileAssociationItem
+    {
+        public string Include;
+        public bool Visible;
+        public string Description;
+        public string Progid;
+        public string DefaultIcon;
+    }
+
+    public enum PublishState
+    {
+        Auto,
+        DataFile,
+        Exclude,
+        Include,
+        Prerequisite
+    }
+
+    public enum FileType
+    {
+        Assembly,
+        File
+    }
+
+    public class PublishFile
+    {
+        public string Include;
+        public bool Visible;
+        public string Group = string.Empty;
+        public PublishState PublishState = PublishState.Include;
+        public bool IncludeHash = true;
+        public FileType FileType = FileType.File;
     }
 
     public enum CSharpProjectType
@@ -1907,11 +2003,15 @@ namespace Sharpmake
         public string StartupObject = string.Empty;
         public bool NoWin32Manifest = false;
         public bool UseMSBuild14IfAvailable = false;
+        // If true, recreate the relative folder hierarchy for content files instead of grouping them up.
+        public bool PreserveLinkFolderPaths = false;
         public Strings ApplicationDefinitionFilenames = new Strings();
         public Strings ResolvedResourcesFullFileNames = new Strings();
         public Strings ResolvedContentFullFileNames = new Strings();
         public Strings ResolvedNoneFullFileNames = new Strings();
         public Strings AdditionalEmbeddedResource = new Strings();
+        public Strings AdditionalEmbeddedResourceAlwaysCopy = new Strings();
+        public Strings AdditionalEmbeddedResourceCopyIfNewer = new Strings();
         public Strings AdditionalEmbeddedAssemblies = new Strings();
         public Strings AdditionalNone = new Strings();
         public Strings SourceNoneFilesExcludeRegex = new Strings();
@@ -1931,6 +2031,8 @@ namespace Sharpmake
         public Strings AnalyzerDllFilePaths = new Strings();
         public Strings AdditionalFolders = new Strings();
         public List<BootstrapperPackage> BootstrapperPackages = new List<BootstrapperPackage>();
+        public List<FileAssociationItem> FileAssociationItems = new List<FileAssociationItem>();
+        public List<PublishFile> PublishFiles = new List<PublishFile>();
 
         public bool IncludeResxAsResources = true;
         public string RootNamespace;
@@ -1943,9 +2045,13 @@ namespace Sharpmake
         public List<UsingTask> UsingTasks = new List<UsingTask>();
 
         public bool? WcfAutoStart; // Wcf Auto-Start service when debugging
+        public string WcfBaseStorage = @"Service References\";
 
         // writes Pre/Post BuildEvents per configuration instead of one for all, this will make editing events in Visual Studio impossible
         public bool ConfigurationSpecificEvents = false;
+
+        // Determines the type of NuGet references generated for this project
+        public NuGetPackageMode NuGetReferenceType = NuGetPackageMode.VersionDefault;
 
         public Options.CSharp.RunPostBuildEvent RunPostBuildEvent = Options.CSharp.RunPostBuildEvent.OnBuildSuccess;
 
@@ -2093,6 +2199,26 @@ namespace Sharpmake
         private List<String> _filteredEmbeddedAssemblies = null;
         public virtual string GetLinkFolder(string file)
         {
+            if(PreserveLinkFolderPaths)
+            {
+                string relativePath = Util.PathGetRelative(SourceRootPath, Path.GetDirectoryName(file));
+
+                // Remove the root, if it exists.
+                // This will only happen if file is rooted *and* doesn't share the same root as SourceRootPath.
+                if(Path.IsPathRooted(relativePath))
+                {
+                    relativePath = relativePath.Substring(Path.GetPathRoot(relativePath).Length);
+                }
+
+                // If the relative path is elsewhere, we leave the file in the root.
+                if(relativePath.Contains(".."))
+                {
+                    return string.Empty;
+                }
+
+                return relativePath;
+            }
+
             if (_filteredEmbeddedAssemblies == null)
             {
                 _filteredEmbeddedAssemblies = new List<string>();

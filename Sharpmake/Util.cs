@@ -154,6 +154,7 @@ namespace Sharpmake
         }
 
         public static readonly char[] _pathSeparators = { Util.WindowsSeparator, Util.UnixSeparator };
+        internal static readonly char[] WildcardCharacters = { '*', '?' };
 
         public static void PathSplitFileNameFromPath(string fileFullPath, out string fileName, out string pathName)
         {
@@ -853,7 +854,7 @@ namespace Sharpmake
 
             Console.WriteLine(message);
             if (Debugger.IsAttached)
-                Debug.WriteLine(message);
+                Trace.WriteLine(message);
         }
 
         public static List<string> FilesAlternatesAutoCleanupDBSuffixes = new List<string>(); // The alternates db suffixes using by other context
@@ -1053,13 +1054,20 @@ namespace Sharpmake
         public static string WinFormSubTypesDbPath = string.Empty;
         private static readonly string s_winFormSubTypesDbPrefix = "winformssubtypesdb";
 
-        private static string GetWinFormSubTypeDbPath()
+        public static string GetWinFormSubTypeDbPath()
         {
-            return Path.Combine(WinFormSubTypesDbPath, string.Format(@"{0}{1}", s_winFormSubTypesDbPrefix, ".bin"));
+            return Path.Combine(WinFormSubTypesDbPath, $@"{s_winFormSubTypesDbPrefix}.bin");
         }
 
         public static void SerializeAllCsprojSubTypes(object allCsProjSubTypes)
         {
+            // If DbPath is not specify, do not save C# subtypes information
+            if (string.IsNullOrEmpty(WinFormSubTypesDbPath))
+                return;
+
+            if (!Directory.Exists(WinFormSubTypesDbPath))
+                Directory.CreateDirectory(WinFormSubTypesDbPath);
+
             string winFormSubTypesDbFullPath = GetWinFormSubTypeDbPath();
 
             using (Stream writeStream = new FileStream(winFormSubTypesDbFullPath, FileMode.Create, FileAccess.Write, FileShare.None))
@@ -1817,16 +1825,25 @@ namespace Sharpmake
         {
             private readonly Stopwatch _stopWatch;
             private readonly Action<long> _disposeAction;
+            private readonly long _minThresholdMs;
 
             public StopwatchProfiler(Action<long> disposeAction)
+                : this(disposeAction, 0)
+            {
+            }
+
+            public StopwatchProfiler(Action<long> disposeAction, long minThresholdMs)
             {
                 _disposeAction = disposeAction;
                 _stopWatch = Stopwatch.StartNew();
+                _minThresholdMs = minThresholdMs;
             }
 
             public void Dispose()
             {
-                _disposeAction(_stopWatch.ElapsedMilliseconds);
+                long elapsed = _stopWatch.ElapsedMilliseconds;
+                if (elapsed > _minThresholdMs)
+                    _disposeAction(elapsed);
             }
         }
 

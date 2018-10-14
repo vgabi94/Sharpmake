@@ -77,7 +77,7 @@ namespace Sharpmake
         private static readonly IDictionary<PlatformImplementation, object> _implementations = new Dictionary<PlatformImplementation, object>(new PlatformImplementationComparer());
         private static readonly IDictionary<Type, object> _defaultImplementations = new Dictionary<Type, object>();
         private static readonly ISet<object> _implementationInstances = new HashSet<object>();
-        private static readonly ISet<Assembly> _platformAssemblies = new HashSet<Assembly>();
+        private static readonly ISet<Assembly> _parsedAssemblies = new HashSet<Assembly>();
 
         static PlatformRegistry()
         {
@@ -113,11 +113,16 @@ namespace Sharpmake
         {
             if (extensionAssembly == null)
                 throw new ArgumentNullException(nameof(extensionAssembly));
+
             if (extensionAssembly.ReflectionOnly)
                 return;
 
             // Don't support loading dynamically compiled assemblies
             if (extensionAssembly.IsDynamic)
+                return;
+
+            // Ignores if the assembly does not declare itself as a Sharpmake extension.
+            if (!ExtensionLoader.ExtensionChecker.IsSharpmakeExtension(extensionAssembly))
                 return;
 
             // Don't support loading dynamically compiled assemblies because we need the location
@@ -126,24 +131,23 @@ namespace Sharpmake
                 throw new NotSupportedException("Assembly does not have any location : not supported.");
 
             // Has that assembly already been checked for platform stuff?
-            if (_platformAssemblies.Any(assembly => assembly.Location == extensionAssembly.Location))
+            if (_parsedAssemblies.Any(assembly => assembly.Location == extensionAssembly.Location))
                 return;
 
-            // Ignores if the assembly does not declare itself as a Sharpmake extension.
-            if (extensionAssembly.GetCustomAttribute<SharpmakeExtensionAttribute>() != null)
+            // Go through all the types declared in the Sharpmake extension assembly and look
+            // up for platform implementations.
+            var typeInfos = from type in extensionAssembly.GetTypes()
+                            let attributes = type.GetCustomAttributes<PlatformImplementationAttribute>()
+                            where attributes.Any()
+                            from attribute in attributes
+                            from platform in EnumeratePlatformBits(attribute.Platforms)
+                            from ifaceType in attribute.InterfaceTypes
+                            select new PlatformImplementationDescriptor(new PlatformImplementation(platform, ifaceType), type);
+
+            var registeredTypes = new List<Type>();
+
+            if (typeInfos.Any())
             {
-                // Go through all the types declared in the Sharpmake extension assembly and look
-                // up for platform implementations.
-                var typeInfos = from type in extensionAssembly.GetTypes()
-                                let attributes = type.GetCustomAttributes<PlatformImplementationAttribute>()
-                                where attributes.Any()
-                                from attribute in attributes
-                                from platform in EnumeratePlatformBits(attribute.Platforms)
-                                from ifaceType in attribute.InterfaceTypes
-                                select new PlatformImplementationDescriptor(new PlatformImplementation(platform, ifaceType), type);
-
-                var registeredTypes = new List<Type>();
-
                 lock (_implementations)
                 {
                     // Make sure that our platform implementations are unique.
@@ -156,18 +160,22 @@ namespace Sharpmake
                         RegisterImplementationImplNoLock(type.Implementation.Platform, ifaceType, GetImplementationInstance(type.ConcreteType));
                     }
                 }
+            }
 
-                // Go through all types again and this time get the default implementations.
-                var defaultTypes = from type in extensionAssembly.GetTypes()
-                                   let attributes = type.GetCustomAttributes<DefaultPlatformImplementationAttribute>()
-                                   where attributes.Any()
-                                   from attribute in attributes
-                                   from ifaceType in attribute.InterfaceTypes
-                                   select new
-                                   {
-                                       ImplementationType = type,
-                                       InterfaceType = ifaceType
-                                   };
+            // Go through all types again and this time get the default implementations.
+            var defaultTypes = from type in extensionAssembly.GetTypes()
+                               let attributes = type.GetCustomAttributes<DefaultPlatformImplementationAttribute>()
+                               where attributes.Any()
+                               from attribute in attributes
+                               from ifaceType in attribute.InterfaceTypes
+                               select new
+                               {
+                                   ImplementationType = type,
+                                   InterfaceType = ifaceType
+                               };
+
+            if (defaultTypes.Any())
+            {
                 lock (_defaultImplementations)
                 {
                     foreach (var type in defaultTypes)
@@ -183,11 +191,12 @@ namespace Sharpmake
                             _defaultImplementations.Add(type.InterfaceType, GetImplementationInstance(type.ImplementationType));
                     }
                 }
-
-                _platformAssemblies.Add(extensionAssembly);
-                PlatformImplementationExtensionRegistered?.Invoke(null, new PlatformImplementationExtensionRegisteredEventArgs(extensionAssembly, registeredTypes));
-
             }
+
+            _parsedAssemblies.Add(extensionAssembly);
+
+            if (typeInfos.Any() || defaultTypes.Any())
+                PlatformImplementationExtensionRegistered?.Invoke(null, new PlatformImplementationExtensionRegisteredEventArgs(extensionAssembly, registeredTypes));
         }
 
         /// <summary>

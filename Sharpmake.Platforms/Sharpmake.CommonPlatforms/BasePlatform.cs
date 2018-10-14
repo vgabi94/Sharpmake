@@ -13,6 +13,7 @@
 // limitations under the License.
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Sharpmake.Generators;
 using Sharpmake.Generators.FastBuild;
 using Sharpmake.Generators.VisualStudio;
@@ -56,13 +57,20 @@ namespace Sharpmake
             return false;
         }
 
-        public virtual void SetupExtraLinkerSettings(IFileGenerator fileGenerator, Project.Configuration.OutputType outputType, string fastBuildOutputFile)
+        public virtual void SetupExtraLinkerSettings(IFileGenerator fileGenerator, Project.Configuration configuration, string fastBuildOutputFile)
         {
-            using (fileGenerator.Resolver.NewScopedParameter("dllOption", outputType == Project.Configuration.OutputType.Dll ? " /DLL" : ""))
+            using (fileGenerator.Resolver.NewScopedParameter("dllOption", configuration.Output == Project.Configuration.OutputType.Dll ? " /DLL" : ""))
             {
                 fileGenerator.Write(Bff.Template.ConfigurationFile.LinkerOptions);
             }
         }
+
+        public virtual IEnumerable<Project.Configuration.BuildStepBase> GetExtraPostBuildEvents(Project.Configuration configuration, string fastBuildOutputFile)
+        {
+            return Enumerable.Empty<Project.Configuration.BuildStepBase>();
+        }
+
+        public virtual string GetOutputFilename(Project.Configuration.OutputType outputType, string fastBuildOutputFile) => fastBuildOutputFile;
 
         public virtual void AddCompilerSettings(IDictionary<string, CompilerSettings> masterCompilerSettings, string compilerName, string rootPath, DevEnv devEnv, string projectRootPath)
         {
@@ -223,6 +231,10 @@ namespace Sharpmake
         public virtual void GenerateProjectConfigurationFastBuildMakeFile(IVcxprojGenerationContext context, IFileGenerator generator)
         {
             generator.Write(_projectConfigurationsFastBuildMakefile);
+        }
+        public virtual void GenerateProjectConfigurationCustomMakeFile(IVcxprojGenerationContext context, IFileGenerator generator)
+        {
+            generator.Write(_projectConfigurationsCustomMakefile);
         }
 
         public virtual void GenerateProjectPlatformImportSheet(IVcxprojGenerationContext context, IFileGenerator generator)

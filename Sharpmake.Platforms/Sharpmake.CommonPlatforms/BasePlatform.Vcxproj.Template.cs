@@ -55,6 +55,7 @@ namespace Sharpmake
       <CreateHotpatchableImage>false</CreateHotpatchableImage>
       <DisableLanguageExtensions>[options.DisableLanguageExtensions]</DisableLanguageExtensions>
       <TreatWChar_tAsBuiltInType>[options.TreatWChar_tAsBuiltInType]</TreatWChar_tAsBuiltInType>
+      <RemoveUnreferencedCodeData>[options.RemoveUnreferencedCodeData]</RemoveUnreferencedCodeData>
       <ForceConformanceInForLoopScope>[options.ForceConformanceInForLoopScope]</ForceConformanceInForLoopScope>
       <RuntimeTypeInfo>[options.RuntimeTypeInfo]</RuntimeTypeInfo>
       <OpenMPSupport>[options.OpenMP]</OpenMPSupport>
@@ -168,8 +169,8 @@ namespace Sharpmake
             @"  <PropertyGroup Condition=""'$(Configuration)|$(Platform)'=='[conf.Name]|[platformName]'"" Label=""Configuration"">
     <ConfigurationType>[options.ConfigurationType]</ConfigurationType>
     <UseDebugLibraries>[options.UseDebugLibraries]</UseDebugLibraries>
-    <_IsNativeEnvironment>[options.NativeEnvironmentVS2012]</_IsNativeEnvironment>
-    <UseNativeEnvironment>[options.NativeEnvironmentVS2013]</UseNativeEnvironment>
+    <PreferredToolArchitecture>[options.PreferredToolArchitecture]</PreferredToolArchitecture>
+    <_IsNativeEnvironment>[options._IsNativeEnvironment]</_IsNativeEnvironment>
     <CharacterSet>[options.CharacterSet]</CharacterSet>
     <UseOfMfc>[options.UseOfMfc]</UseOfMfc>
     <CLRSupport>[clrSupport]</CLRSupport>
@@ -203,6 +204,7 @@ namespace Sharpmake
     <LibraryPath>[options.LibraryPath]</LibraryPath>
     <ExcludePath>[options.ExcludePath]</ExcludePath>
     <DisableFastUpToDateCheck>[options.DisableFastUpToDateCheck]</DisableFastUpToDateCheck>
+    <EnableManagedIncrementalBuild>[options.EnableManagedIncrementalBuild]</EnableManagedIncrementalBuild>
   </PropertyGroup>
 ";
 
@@ -238,6 +240,19 @@ del ""[options.OutputDirectory]\[conf.TargetFileFullName].pdb"" >NUL 2>NUL</NMak
     <NMakePreprocessorDefinitions>[options.PreprocessorDefinitions]</NMakePreprocessorDefinitions>
     <NMakeIncludeSearchPath>[options.AdditionalIncludeDirectories]</NMakeIncludeSearchPath>
     <TargetFileName>[options.OutputFileName].exe</TargetFileName>
+  </PropertyGroup>
+";
+
+        private const string _projectConfigurationsCustomMakefile =
+            @"  <PropertyGroup Condition=""'$(Configuration)|$(Platform)'=='[conf.Name]|[platformName]'"">
+    <OutDir>[options.OutputDirectory]\</OutDir>
+    <IntDir>[options.IntermediateDirectory]\</IntDir>
+    <NMakeBuildCommandLine>[conf.CustomBuildSettings.BuildCommand]</NMakeBuildCommandLine>
+    <NMakeReBuildCommandLine>[conf.CustomBuildSettings.RebuildCommand]</NMakeReBuildCommandLine>
+    <NMakeCleanCommandLine>[conf.CustomBuildSettings.CleanCommand]</NMakeCleanCommandLine>
+    <NMakeOutput>[conf.CustomBuildSettings.OutputFile]</NMakeOutput>
+    <NMakePreprocessorDefinitions>[options.PreprocessorDefinitions]</NMakePreprocessorDefinitions>
+    <NMakeIncludeSearchPath>[options.AdditionalIncludeDirectories]</NMakeIncludeSearchPath>
   </PropertyGroup>
 ";
     }

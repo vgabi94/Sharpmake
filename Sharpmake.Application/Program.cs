@@ -17,8 +17,8 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 using System.Threading;
+using System.Threading.Tasks;
 using Sharpmake.Generators;
 using Sharpmake.Generators.VisualStudio;
 
@@ -66,7 +66,7 @@ namespace Sharpmake.Application
             if (Debugger.IsAttached)
             {
                 message = message.Replace(prefix + Util.CallerInfoTag, String.Empty);
-                Debug.Write(message);
+                Trace.Write(message);
             }
         }
 
@@ -88,7 +88,7 @@ namespace Sharpmake.Application
 
                 Console.Write(message);
                 if (Debugger.IsAttached)
-                    Debug.Write(message);
+                    Trace.Write(message);
             }
         }
 
@@ -103,7 +103,7 @@ namespace Sharpmake.Application
             Interlocked.Increment(ref s_warningCount);
             Console.Write(msg, args);
             if (Debugger.IsAttached)
-                Debug.Write(args.Length > 0 ? string.Format(msg, args) : msg);
+                Trace.Write(args.Length > 0 ? string.Format(msg, args) : msg);
         }
 
         public static void ErrorWrite(string msg, params object[] args)
@@ -111,7 +111,7 @@ namespace Sharpmake.Application
             Interlocked.Increment(ref s_errorCount);
             Console.Write(msg, args);
             if (Debugger.IsAttached)
-                Debug.Write(args.Length > 0 ? string.Format(msg, args) : msg);
+                Trace.Write(args.Length > 0 ? string.Format(msg, args) : msg);
         }
 
         public static void ErrorWriteLine(string msg, params object[] args)
@@ -123,7 +123,7 @@ namespace Sharpmake.Application
 
         private static int Main()
         {
-            if (CommandLine.ContainParameter("-breakintodebugger"))
+            if (CommandLine.ContainParameter("breakintodebugger"))
             {
                 System.Windows.Forms.MessageBox.Show("Debugger requested. Please attach a debugger and press OK");
                 Debugger.Break();
@@ -138,7 +138,10 @@ namespace Sharpmake.Application
             try
             {
                 DebugEnable = CommandLine.ContainParameter("verbose") || CommandLine.ContainParameter("debug") || CommandLine.ContainParameter("diagnostics");
-                LogWriteLine("sharpmake");
+
+                Version version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
+                string versionString = string.Join(".", version.Major, version.Minor, version.Build);
+                LogWriteLine($"sharpmake {versionString}");
                 LogWriteLine("  arguments : {0}", CommandLine.GetProgramCommandLine());
                 LogWriteLine("  directory : {0}", Directory.GetCurrentDirectory());
                 LogWriteLine(string.Empty);
@@ -215,16 +218,8 @@ namespace Sharpmake.Application
                             {
                                 exitCode = ExitCode.Error;
                                 DebugWriteLine($"{regressions.Count} Regressions detected:");
-                                var fileChanges = regressions.Where(x => x.FileStatus == BuildContext.RegressionTest.FileStatus.Different).ToList();
-                                if (fileChanges.Count > 0)
-                                {
-                                    DebugWriteLine($"  {fileChanges.Count} files have changed from the reference:");
-                                    fileChanges.ForEach(x =>
-                                    {
-                                        DebugWriteLine($"    Exp: {x.ReferencePath}");
-                                        DebugWriteLine($"    Was: {x.OutputPath}");
-                                    });
-                                }
+                                List<BuildContext.RegressionTest.OutputInfo> fileChanges = regressions.Where(x => x.FileStatus == BuildContext.RegressionTest.FileStatus.Different).ToList();
+                                LogFileChanges(fileChanges);
 
                                 var fileMissing = regressions.Where(x => x.FileStatus == BuildContext.RegressionTest.FileStatus.NotGenerated).ToList();
                                 if (fileMissing.Count > 0)
@@ -331,7 +326,11 @@ namespace Sharpmake.Application
 
         private static void LogPlatformImplementationExtensionRegistered(object sender, PlatformImplementationExtensionRegisteredEventArgs e)
         {
-            LogWriteLine("Loaded platform extension {0} (Found {1} implementation class{2})", e.ExtensionAssembly.Location, e.Interfaces.Count, e.Interfaces.Count > 1 ? "es" : string.Empty);
+            System.Reflection.AssemblyName extensionName = e.ExtensionAssembly.GetName();
+            Version version = extensionName.Version;
+            string versionString = string.Join(".", version.Major, version.Minor, version.Build);
+
+            LogWriteLine("    loaded platform {0} {1} from '{2}'", extensionName.Name, versionString, e.ExtensionAssembly.Location);
         }
 
         private static void GenerateAll(BuildContext.BaseBuildContext buildContext, Argument parameters)
@@ -555,6 +554,122 @@ namespace Sharpmake.Application
                     RecursivePrintMethodInfo(dependent, set, nested);
             }
         }
+
+        private static string LocateDiffExecutable()
+        {
+            var candidateDirectories = new List<string>();
+
+            if (!Util.UsesUnixSeparator) // poor way to test the OS...
+            {
+                try
+                {
+                    candidateDirectories.Add(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), @"Git\usr\bin"));
+                    candidateDirectories.Add(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), @"Git\usr\bin"));
+                }
+                catch { }
+            }
+            candidateDirectories.AddRange(Environment.GetEnvironmentVariable("PATH").Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries));
+
+            foreach (var candidateDirectory in candidateDirectories)
+            {
+                foreach (var candidateExeName in new[] { "diff", "diff.exe" })
+                {
+                    var candidatePath = Path.Combine(candidateDirectory, candidateExeName);
+                    if (File.Exists(candidatePath))
+                        return candidatePath;
+                }
+            }
+
+            return null;
+        }
+
+        private static void LogFileChanges(List<BuildContext.RegressionTest.OutputInfo> fileChanges)
+        {
+            if (fileChanges.Count == 0)
+                return;
+
+            var diffs = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+            object dictionaryAccess = new object();
+
+
+            string diffExecutable = LocateDiffExecutable();
+            if (diffExecutable == null)
+            {
+                DebugWriteLine($"  {fileChanges.Count} files have changed from the reference:");
+                fileChanges.ForEach(x =>
+                {
+                    DebugWriteLine($"    Exp: {x.ReferencePath}");
+                    DebugWriteLine($"    Was: {x.OutputPath}");
+                });
+            }
+            else
+            {
+                DebugWriteLine($"  {fileChanges.Count} files have changed from the reference. Aggregating diff using '{diffExecutable}'");
+                Parallel.ForEach(fileChanges, x =>
+                {
+                    bool refFileExists = File.Exists(x.ReferencePath);
+                    bool outFileExists = File.Exists(x.OutputPath);
+
+                    if (refFileExists && outFileExists)
+                    {
+                        Process process = new Process();
+                        process.StartInfo.FileName = diffExecutable;
+                        process.StartInfo.UseShellExecute = false;
+                        process.StartInfo.CreateNoWindow = true;
+                        process.StartInfo.RedirectStandardOutput = true;
+
+                        // -i, --ignore-case               ignore case differences in file contents
+                        // -u, -U NUM, --unified[=NUM]   output NUM (default 3) lines of unified context
+                        // -w, --ignore-all-space          ignore all white space
+                        process.StartInfo.Arguments = $"-i -u -w {x.ReferencePath} {x.OutputPath}";
+
+                        process.Start();
+
+                        var output = process.StandardOutput.ReadToEnd();
+                        process.WaitForExit();
+
+                        var lines = output.Split('\n').Where(l => (l.Length > 1 && (l[0] == '+' || l[0] == '-') && !l.StartsWith("--- ") && !l.StartsWith("+++ ")));
+                        var diff = string.Concat(lines);
+                        lock (dictionaryAccess)
+                        {
+                            List<string> currentList = null;
+                            if (!diffs.TryGetValue(diff, out currentList))
+                                diffs[diff] = new List<string> { x.OutputPath };
+                            else
+                                currentList.Add(x.OutputPath);
+                        }
+                    }
+                    else if (!refFileExists)
+                        DebugWriteLine($"    ExtraFileGenerated: {x.OutputPath}");
+                    else if (!outFileExists)
+                        DebugWriteLine($"    MissingFileInOutput: {x.ReferencePath}");
+                });
+
+                int i = 0;
+                foreach (var diff in diffs.OrderByDescending(d => d.Value.Count))
+                {
+                    DebugWriteLine(
+                        $"    Diff block {++i}/{diffs.Count}"
+                        + (diff.Value.Count > 1 ? $" shared by {diff.Value.Count} files:" : " only in '" + diff.Value.First() + "':")
+                    );
+                    int j = 0;
+                    foreach (var file in diff.Value)
+                        DebugWriteLine($"      {++j}/{diff.Value.Count}  {file}");
+
+                    var diffLines = diff.Key.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                    if (diffLines.Length == 0)
+                    {
+                        DebugWriteLine($"        // only whitespace or casing changes");
+                    }
+                    else
+                    {
+                        foreach (var diffLine in diffLines)
+                            DebugWriteLine($"    {diffLine}");
+                    }
+                }
+            }
+        }
+
 
         public static IGeneratorManager GetGeneratorsManager()
         {

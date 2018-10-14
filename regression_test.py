@@ -69,15 +69,15 @@ tests = [
     Test("CSharpHelloWorld", "HelloWorld.sharpmake.cs"),
     Test("HelloWorld", "HelloWorld.sharpmake.cs"),
     Test("CSharpVsix", "CSharpVsix.sharpmake.cs"),
+    Test("CSharpWCF", "CSharpWCF.sharpmake.cs", "CSharpWCF\codebase"),
     Test("PackageReferences", "PackageReferences.sharpmake.cs"),
-    Test("QTFileCustomBuild", "QTFileCustomBuild.sharpmake.cs"),
-    Test("SharpmakeGen", "SharpmakeGen.sharpmake.cs", "..")
+    Test("QTFileCustomBuild", "QTFileCustomBuild.sharpmake.cs")
 ]
 
 def find_target_path(directory, target):
     optim_tokens = ["debug", "release"]
     for optim_token in optim_tokens:
-        path = os.path.abspath(os.path.join(directory, "bin", optim_token, target))
+        path = os.path.abspath(os.path.join("..", "bin", optim_token, "samples", target))
         if os.path.isfile(path):
             return path
 

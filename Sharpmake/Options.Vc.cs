@@ -54,7 +54,8 @@ namespace Sharpmake
                     v10_0_10586_0,
                     v10_0_14393_0,
                     v10_0_15063_0,
-                    v10_0_16299_0
+                    v10_0_16299_0,
+                    v10_0_17134_0
                 }
 
                 public enum CharacterSet
@@ -144,12 +145,21 @@ namespace Sharpmake
                     UseMfcDynamic
                 }
 
+                [Obsolete("Please use " + nameof(PreferredToolArchitecture) + " instead", true)]
                 public enum NativeEnvironment
                 {
                     [DevEnvVersion(minimum = DevEnv.vs2012)]
                     Enable,
                     [Default]
                     Disable
+                }
+
+                public enum PreferredToolArchitecture
+                {
+                    [Default]
+                    Default,
+                    x86,
+                    x64
                 }
 
                 public enum DisableFastUpToDateCheck
@@ -355,6 +365,14 @@ namespace Sharpmake
                     Enable,
                 }
 
+                public enum CreateHotPatchableCode
+                {
+                    [Default]
+                    Default,
+                    Disable,
+                    Enable,
+                }
+
                 public enum DisableLanguageExtensions
                 {
                     [Default]
@@ -369,10 +387,18 @@ namespace Sharpmake
                     Enable,
                 }
 
+                [Obsolete("Use option RemoveUnreferencedCodeData instead")]
                 public enum RemovedUnreferencedCOMDAT
                 {
-                    [Default]
                     Disable,
+                    [Default]
+                    Enable,
+                }
+
+                public enum RemoveUnreferencedCodeData
+                {
+                    Disable,
+                    [Default]
                     Enable,
                 }
 
@@ -746,6 +772,16 @@ namespace Sharpmake
                     Default,
                     Enable,
                     Disable
+                }
+
+                public enum CreateHotPatchableImage
+                {
+                    [Default]
+                    Disable,
+                    Enable,
+                    X86Image,
+                    X64Image,
+                    ItaniumImage
                 }
 
                 public enum ForceFileOutput

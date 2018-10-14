@@ -13,12 +13,11 @@ call :UpdateRef samples HelloWorld        HelloWorld.sharpmake.cs        referen
 if not "%ERRORLEVEL_BACKUP%" == "0" goto error
 call :UpdateRef samples CSharpVsix        CSharpVsix.sharpmake.cs        reference CSharpVsix
 if not "%ERRORLEVEL_BACKUP%" == "0" goto error
+call :UpdateRef samples CSharpWCF         CSharpWCF.sharpmake.cs         reference CSharpWCF\codebase
+if not "%ERRORLEVEL_BACKUP%" == "0" goto error
 call :UpdateRef samples PackageReferences PackageReferences.sharpmake.cs reference PackageReferences
 if not "%ERRORLEVEL_BACKUP%" == "0" goto error
 call :UpdateRef samples QTFileCustomBuild QTFileCustomBuild.sharpmake.cs reference QTFileCustomBuild
-if not "%ERRORLEVEL_BACKUP%" == "0" goto error
-:: that one is special, the root is the current folder
-call :UpdateRef samples SharpmakeGen      SharpmakeGen.sharpmake.cs      reference %~dp0
 if not "%ERRORLEVEL_BACKUP%" == "0" goto error
 
 @COLOR 2F
@@ -38,9 +37,9 @@ pushd %CD%
 :: set testScopedCurrentDirectory as current
 cd /d %~dp0%~1
 
-set SHARPMAKE_EXECUTABLE=%~2\bin\Debug\Sharpmake.Application.exe
-if not exist %SHARPMAKE_EXECUTABLE% set SHARPMAKE_EXECUTABLE=%~2\bin\Release\Sharpmake.Application.exe
-if not exist %SHARPMAKE_EXECUTABLE% echo Cannot find sharpmake executable in %~dp0%~1\%~2 & pause & goto error 
+set SHARPMAKE_EXECUTABLE=%~dp0bin\Debug\Sharpmake.Application.exe
+if not exist %SHARPMAKE_EXECUTABLE% set SHARPMAKE_EXECUTABLE=%~dp0bin\Release\Sharpmake.Application.exe
+if not exist %SHARPMAKE_EXECUTABLE% echo Cannot find sharpmake executable in %~dp0bin & pause & goto error
 
 echo Using executable %SHARPMAKE_EXECUTABLE%
 

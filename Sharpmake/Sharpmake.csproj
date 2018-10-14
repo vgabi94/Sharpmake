@@ -9,7 +9,7 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>Sharpmake</RootNamespace>
     <AssemblyName>Sharpmake</AssemblyName>
-    <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.6.1</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
@@ -17,7 +17,7 @@
     <DebugSymbols>true</DebugSymbols>
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
-    <OutputPath>bin\debug</OutputPath>
+    <OutputPath>..\bin\debug</OutputPath>
     <IntermediateOutputPath>obj\anycpu\debug</IntermediateOutputPath>
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <WarningLevel>4</WarningLevel>
@@ -31,7 +31,7 @@
     <DebugSymbols>false</DebugSymbols>
     <DebugType>pdbonly</DebugType>
     <Optimize>true</Optimize>
-    <OutputPath>bin\release</OutputPath>
+    <OutputPath>..\bin\release</OutputPath>
     <IntermediateOutputPath>obj\anycpu\release</IntermediateOutputPath>
     <DefineConstants>TRACE</DefineConstants>
     <WarningLevel>4</WarningLevel>
@@ -51,6 +51,7 @@
   <ItemGroup>
     <Compile Include="Analyzer\Analyzer.cs" />
     <Compile Include="Assembler.cs" />
+    <Compile Include="AttributeParsers.cs" />
     <Compile Include="Attributes.cs" />
     <Compile Include="BuildContext\BaseBuildContext.cs" />
     <Compile Include="BuildContext\ConfigureDependencyAnalyzer.cs" />
@@ -76,6 +77,7 @@
     <Compile Include="GenerationOutput.cs" />
     <Compile Include="GeneratorManager.cs" />
     <Compile Include="GlobalSuppressions.cs" />
+    <Compile Include="IAssemblerContext.cs" />
     <Compile Include="ICommandLineInterface.cs" />
     <Compile Include="IFastBuildCompilerSettings.cs" />
     <Compile Include="IPlatformDescriptor.cs" />
@@ -90,6 +92,7 @@
     <Compile Include="Options.Vc.cs" />
     <Compile Include="Options.XCode.cs" />
     <Compile Include="Options.cs" />
+    <Compile Include="PackageReferences.Template.cs" />
     <Compile Include="PackageReferences.cs" />
     <Compile Include="PlatformAttributes.cs" />
     <Compile Include="PlatformEventArgs.cs" />
@@ -104,6 +107,7 @@
     <Compile Include="SharpmakeExtension.cs" />
     <Compile Include="Solution.Configuration.cs" />
     <Compile Include="Solution.cs" />
+    <Compile Include="SourceAttributeParser.cs" />
     <Compile Include="Strings.cs" />
     <Compile Include="Target.cs" />
     <Compile Include="ThreadPool.cs" />

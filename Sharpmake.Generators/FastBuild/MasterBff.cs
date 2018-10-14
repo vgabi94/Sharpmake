@@ -505,6 +505,11 @@ namespace Sharpmake.Generators.FastBuild
                         }
                     }
                 }
+                else
+                {
+                    throw new Error("error, BuildStep not supported: {0}", buildEvent.GetType().FullName);
+                }
+
             }
         }
 
@@ -649,13 +654,13 @@ namespace Sharpmake.Generators.FastBuild
                 }
 
                 using (masterBffGenerator.Declare("fastbuildCompilerName", compiler.Key))
-                using (masterBffGenerator.Declare("fastBuildVisualStudioEnvironment", compilerSettings.RootPath))
+                using (masterBffGenerator.Declare("fastBuildCompilerRootPath", compilerSettings.RootPath))
                 using (masterBffGenerator.Declare("fastBuildCompilerExecutable", string.IsNullOrEmpty(compilerSettings.Executable) ? FileGeneratorUtilities.RemoveLineTag : compilerSettings.Executable))
                 using (masterBffGenerator.Declare("fastBuildExtraFiles", compilerSettings.ExtraFiles.Count > 0 ? UtilityMethods.FBuildCollectionFormat(compilerSettings.ExtraFiles, 20) : FileGeneratorUtilities.RemoveLineTag))
                 using (masterBffGenerator.Declare("fastBuildVS2012EnumBugWorkaround", fastBuildVS2012EnumBugWorkaround))
                 {
                     masterBffGenerator.Write(Bff.Template.ConfigurationFile.CompilerSetting);
-                    foreach (var compilerConfiguration in compilerSettings.Configurations)
+                    foreach (var compilerConfiguration in compilerSettings.Configurations.OrderBy(x => x.Key))
                     {
                         var compConf = compilerConfiguration.Value;
 

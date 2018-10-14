@@ -61,7 +61,10 @@ namespace Sharpmake.Generators.VisualStudio
     <UseVSHostingProcess>[options.UseVSHostingProcess]</UseVSHostingProcess>
     <ProductName>[options.ProductName]</ProductName>
     <PublisherName>[options.PublisherName]</PublisherName>
+    <MinimumRequiredVersion>[options.MinimumRequiredVersion]</MinimumRequiredVersion>
     <WebPage>[options.WebPage]</WebPage>
+    <OpenBrowserOnPublish>[options.OpenBrowserOnPublish]</OpenBrowserOnPublish>
+    <CreateWebPageOnPublish>[options.CreateWebPageOnPublish]</CreateWebPageOnPublish>
     <BootstrapperComponentsUrl>[options.BootstrapperComponentsUrl]</BootstrapperComponentsUrl>
     <Install>[options.Install]</Install>
     <InstallFrom>[options.InstallFrom]</InstallFrom>
@@ -74,7 +77,10 @@ namespace Sharpmake.Generators.VisualStudio
     <CopyOutputSymbolsToOutputDirectory>[options.CopyOutputSymbolsToOutputDirectory]</CopyOutputSymbolsToOutputDirectory>
     <MapFileExtensions>[options.MapFileExtensions]</MapFileExtensions>
     <ApplicationRevision>[options.ApplicationRevision]</ApplicationRevision>
+    <ApplicationVersion>[options.ApplicationVersion]</ApplicationVersion>
     <UseApplicationTrust>[options.UseApplicationTrust]</UseApplicationTrust>
+    <CreateDesktopShortcut>[options.CreateDesktopShortcut]</CreateDesktopShortcut>
+    <PublishWizardCompleted>[options.PublishWizardCompleted]</PublishWizardCompleted>
     <BootstrapperEnabled>[options.BootstrapperEnabled]</BootstrapperEnabled>
     <MinimumVisualStudioVersion>[options.MinimumVisualStudioVersion]</MinimumVisualStudioVersion>
     <OldToolsVersion>[options.OldToolsVersion]</OldToolsVersion>
@@ -104,6 +110,7 @@ namespace Sharpmake.Generators.VisualStudio
     <BaseAddress>[options.BaseAddress]</BaseAddress>
     <OutputPath>[options.OutputDirectory]</OutputPath>
     <IntermediateOutputPath>[options.IntermediateDirectory]</IntermediateOutputPath>
+    <BaseIntermediateOutputPath>[options.BaseIntermediateOutputPath]</BaseIntermediateOutputPath>
     <DefineConstants>[options.PreprocessorDefinitions]</DefineConstants>
     <ErrorReport>[options.ErrorReport]</ErrorReport>
     <WarningLevel>[options.WarningLevel]</WarningLevel>
@@ -117,6 +124,8 @@ namespace Sharpmake.Generators.VisualStudio
     <StartWorkingDirectory>[options.StartWorkingDirectory]</StartWorkingDirectory>
     <CodeAnalysisRuleSet>[conf.CodeAnalysisRuleSetFilePath]</CodeAnalysisRuleSet>
     <LangVersion>[options.LanguageVersion]</LangVersion>
+    <CopyVsixExtensionFiles>[options.CopyVsixExtensionFiles]</CopyVsixExtensionFiles>
+    <CopyVsixExtensionLocation>[options.CopyVsixExtensionLocation]</CopyVsixExtensionLocation>
   </PropertyGroup>
 ";
 
@@ -373,7 +382,7 @@ namespace Sharpmake.Generators.VisualStudio
 ";
 
                 public static string WCFMetadata =
-@"    <WCFMetadata Include=""Service References\"" />
+@"    <WCFMetadata Include=""[baseStorage]"" />
 ";
 
                 public static string WCFMetadataStorage =
@@ -417,6 +426,23 @@ namespace Sharpmake.Generators.VisualStudio
       <ProductName>[productName]</ProductName>
       <Install>[install]</Install>
     </BootstrapperPackage>
+";
+                public static string FileAssociationItem =
+                    @"    <FileAssociation Include=""[include]"">
+      <Visible>[visible]</Visible>
+      <Description>[description]</Description>
+      <Progid>[progid]</Progid>
+      <DefaultIcon>[defaultIcon]</DefaultIcon>
+    </FileAssociation>
+";
+                public static string PublishFile =
+                    @"    <PublishFile Include=""[include]"">
+      <Visible>[visible]</Visible>
+      <Group>[group]</Group>
+      <PublishState>[publishState]</PublishState>
+      <IncludeHash>[includeHash]</IncludeHash>
+      <FileType>[fileType]</FileType>
+    </PublishFile>
 ";
 
                 public static string ProjectReferenceBegin =
@@ -609,8 +635,6 @@ namespace Sharpmake.Generators.VisualStudio
   </ProjectExtensions>
 ";
 
-            public const string PackageReference = "    <PackageReference Include=\"[packageName]\" Version=\"[packageVersion]\" />\n";
-
             public const string CustomPropertiesStart =
 @"  <PropertyGroup>
 ";
@@ -640,6 +664,9 @@ namespace Sharpmake.Generators.VisualStudio
     <StartURL>[conf.CsprojUserFile.StartURL]</StartURL>
     <StartArguments>[conf.CsprojUserFile.StartArguments]</StartArguments>
     <StartWorkingDirectory>[conf.CsprojUserFile.WorkingDirectory]</StartWorkingDirectory>";
+
+                public static readonly string DebugUnmanaged =
+@"    <EnableUnmanagedDebugging>[unmanagedDebugEnabled]</EnableUnmanagedDebugging>";
             }
         }
     }

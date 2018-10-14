@@ -122,6 +122,8 @@ namespace Sharpmake
         private ConcurrentDictionary<Type, GenerationOutput> _generationReport = new ConcurrentDictionary<Type, GenerationOutput>();
         private HashSet<Type> _buildScheduledType = new HashSet<Type>();
 
+        private readonly List<ISourceAttributeParser> _attributeParsers = new List<ISourceAttributeParser>();
+
         public Builder(
             BuildContext.BaseBuildContext context,
             bool multithreaded,
@@ -361,7 +363,12 @@ namespace Sharpmake
             return Assembly.LoadFrom(generatorsAssembly);
         });
 
-        private Assembly BuildAndLoadAssembly(IList<string> sharpmakeFiles)
+        private IAssemblyInfo BuildAndLoadAssembly(IList<string> sharpmakeFiles, BuilderCompileErrorBehavior compileErrorBehavior)
+        {
+            return BuildAndLoadAssembly(sharpmakeFiles, new BuilderContext(this, compileErrorBehavior));
+        }
+
+        private IAssemblyInfo BuildAndLoadAssembly(IList<string> sharpmakeFiles, IBuilderContext context, IEnumerable<ISourceAttributeParser> parsers = null)
         {
             Assembler assembler = new Assembler();
 
@@ -371,9 +378,21 @@ namespace Sharpmake
             // Add generators assembly to be able to reference them from .sharpmake.cs files
             assembler.Assemblies.Add(SharpmakeGeneratorAssembly.Value);
 
-            Assembly newAssembly = assembler.BuildAssembly(sharpmakeFiles.ToArray());
+            // Add attribute parsers
+            if (parsers != null)
+            {
+                assembler.UseDefaultParsers = false;
+                assembler.AttributeParsers.AddRange(parsers);
+            }
+            else
+            {
+                foreach (var parser in _attributeParsers)
+                    assembler.AttributeParsers.Add(parser);
+            }
 
-            if (newAssembly == null)
+            var newAssemblyInfo = assembler.BuildAssembly(context, sharpmakeFiles.ToArray());
+
+            if (newAssemblyInfo.Assembly == null && context.CompileErrorBehavior == BuilderCompileErrorBehavior.ThrowException)
                 throw new InternalError();
 
             // Keep track of assemblies explicitly referenced by compiled files
@@ -388,23 +407,20 @@ namespace Sharpmake
                 _references[assemblyName] = fullpath;
             }
 
-            // Load platforms if they were passed as references
-            using (var extensionLoader = new ExtensionLoader())
-            {
-                foreach (var referencePath in assembler.References)
-                {
-                    extensionLoader.LoadExtension(referencePath, false);
-                }
-            }
-
-            _builtAssemblies.Add(newAssembly);
-            return newAssembly;
+            if (newAssemblyInfo.Assembly != null)
+                _builtAssemblies.Add(newAssemblyInfo.Assembly);
+            return newAssemblyInfo;
         }
 
         // Expect a list of existing files with their full path
         public Assembly LoadSharpmakeFiles(params string[] sharpmakeFiles)
         {
-            return BuildAndLoadAssembly(sharpmakeFiles);
+            return LoadSharpmakeFiles(BuilderCompileErrorBehavior.ThrowException, sharpmakeFiles).Assembly;
+        }
+
+        public IAssemblyInfo LoadSharpmakeFiles(BuilderCompileErrorBehavior compileErrorBehavior, params string[] sharpmakeFiles)
+        {
+            return BuildAndLoadAssembly(sharpmakeFiles, compileErrorBehavior);
         }
 
         private Assembly CurrentDomain_AssemblyResolve(object sender, ResolveEventArgs args)
@@ -754,7 +770,7 @@ namespace Sharpmake
                 foreach (var conf in p.Configurations)
                 {
                     if (!usedConfigs.Contains(conf))
-                        LogWarningLine(conf.Project.SharpmakeCsFileName + ": Warning: Config not used during generation: " + conf);
+                        LogWarningLine(conf.Project.SharpmakeCsFileName + ": Warning: Config not used during generation: " + conf.Owner.GetType().ToNiceTypeName() + ":" + conf.Target);
                 }
             }
         }
@@ -767,7 +783,7 @@ namespace Sharpmake
                 WriteLogs();
 
             LogWriteLine("  generating projects and solutions...");
-            using (new Util.StopwatchProfiler(ms => { LogWriteLine("    generation done done in {0:0.0} sec", ms / 1000.0f); }))
+            using (new Util.StopwatchProfiler(ms => { LogWriteLine("    generation done in {0:0.0} sec", ms / 1000.0f); }))
             {
                 var projects = new List<Project>(_projects.Values);
                 var solutions = new List<Solution>(_solutions.Values);
@@ -776,7 +792,11 @@ namespace Sharpmake
                 projects.AddRange(_generatedProjects);
 
                 // Pre event
-                EventPreGeneration?.Invoke(projects, solutions);
+                if (EventPreGeneration != null)
+                {
+                    using (new Util.StopwatchProfiler(ms => { LogWriteLine("    pre-generation steps took {0:0.0} sec", ms / 1000.0f); }, minThresholdMs: 100))
+                        EventPreGeneration.Invoke(projects, solutions);
+                }
 
                 // start with huge solutions to balance task with small one at the end.
                 solutions.Sort((s0, s1) => s1.Configurations.Count.CompareTo(s0.Configurations.Count));
@@ -792,8 +812,14 @@ namespace Sharpmake
                     _tasks.Wait();
 
                 // Post events
-                EventPostGeneration?.Invoke(projects, solutions);
-                EventPostGenerationReport?.Invoke(projects, solutions, _generationReport);
+                if (EventPostGeneration != null || EventPostGenerationReport != null)
+                {
+                    using (new Util.StopwatchProfiler(ms => { LogWriteLine("    post-generation steps took {0:0.0} sec", ms / 1000.0f); }, minThresholdMs: 100))
+                    {
+                        EventPostGeneration?.Invoke(projects, solutions);
+                        EventPostGenerationReport?.Invoke(projects, solutions, _generationReport);
+                    }
+                }
 
                 return _generationReport;
             }
@@ -909,6 +935,81 @@ namespace Sharpmake
                     GenerateProjectFile(pair);
             }
         }
+
+        public void AddAttributeParser(ISourceAttributeParser parser)
+        {
+            _attributeParsers.Add(parser);
+        }
+
+        #region IBuilderContext
+        private class LoadInfo : ILoadInfo
+        {
+            public IAssemblyInfo AssemblyInfo { get; }
+            public Assembly Assembly { get; }
+            public IEnumerable<ISourceAttributeParser> Parsers { get; }
+
+            public LoadInfo(IAssemblyInfo assemblyInfo)
+                : this(assemblyInfo, assemblyInfo.Assembly, null)
+            { }
+            public LoadInfo(IAssemblyInfo assemblyInfo, IEnumerable<ISourceAttributeParser> parsers)
+                : this(assemblyInfo, assemblyInfo.Assembly, parsers)
+            { }
+            public LoadInfo(Assembly assembly)
+                : this(null, assembly, null)
+            { }
+            public LoadInfo(Assembly assembly, IEnumerable<ISourceAttributeParser> parsers)
+                : this(null, assembly, parsers)
+            { }
+
+            private LoadInfo(IAssemblyInfo assemblyInfo, Assembly assembly, IEnumerable<ISourceAttributeParser> parsers)
+            {
+                AssemblyInfo = assemblyInfo;
+                Assembly = assembly;
+                Parsers = parsers?.ToArray() ?? Enumerable.Empty<ISourceAttributeParser>();
+            }
+        }
+
+        private class BuilderContext : IBuilderContext
+        {
+            private readonly Builder _builder;
+
+            public BuilderCompileErrorBehavior CompileErrorBehavior { get; }
+
+            public BuilderContext(Builder builder, BuilderCompileErrorBehavior compileErrorBehavior)
+            {
+                _builder = builder;
+                CompileErrorBehavior = compileErrorBehavior;
+            }
+
+            public ILoadInfo BuildAndLoadSharpmakeFiles(IEnumerable<ISourceAttributeParser> parsers, params string[] files)
+            {
+                var parserCount = _builder._attributeParsers.Count;
+                var assemblyInfo = _builder.BuildAndLoadAssembly(files, this, parsers);
+                if (assemblyInfo.Assembly != null)
+                    _builder.ExecuteEntryPointInAssemblies<EntryPoint>(assemblyInfo.Assembly);
+
+                return new LoadInfo(assemblyInfo, _builder._attributeParsers.Skip(parserCount));
+            }
+
+            public ILoadInfo LoadExtension(string file)
+            {   
+                // Load extensions if they were passed as references (platforms,
+                // entry point execution to add new ISourceAttributeParser...)
+                using (var extensionLoader = new ExtensionLoader())
+                {
+                    var parserCount = _builder._attributeParsers.Count;
+                    var assembly = extensionLoader.LoadExtension(file, false);
+                    return new LoadInfo(assembly, _builder._attributeParsers.Skip(parserCount));
+                }
+                
+            }
+        }
+
+        public IBuilderContext CreateContext(BuilderCompileErrorBehavior compileErrorBehavior = BuilderCompileErrorBehavior.ThrowException)
+        {
+            return new BuilderContext(this, compileErrorBehavior);
+        }
+        #endregion
 
         #region Log
 

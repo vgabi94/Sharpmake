@@ -80,9 +80,9 @@ Settings
 //=================================================================================================================
 Compiler( '[fastbuildCompilerName]' )
 {
-    .RootPath     = '[fastBuildVisualStudioEnvironment]'
-    .Executable   = '[fastBuildCompilerExecutable]'
-    .ExtraFiles   = [fastBuildExtraFiles]
+    .ExecutableRootPath     = '[fastBuildCompilerRootPath]'
+    .Executable             = '[fastBuildCompilerExecutable]'
+    .ExtraFiles             = [fastBuildExtraFiles]
     [fastBuildVS2012EnumBugWorkaround]
 }
 ";
@@ -101,8 +101,9 @@ Compiler( '[fastbuildCompilerName]' )
     .Executable             = '[fastBuildExecutable]'
 ]
 ";
+
                 public static string LinkerOptions = @"
-    .LinkerOptions          = '/OUT:""%2"" ""%1""[dllOption]'
+    .LinkerOptions          = '/OUT:""%2""[dllOption]'
                             // General
                             // ---------------------------
                             + ' [cmdLineOptions.ShowProgress]'
@@ -116,6 +117,10 @@ Compiler( '[fastbuildCompilerName]' )
                             + ' [cmdLineOptions.IgnoreAllDefaultLibraries]'
                             + ' [cmdLineOptions.IgnoreDefaultLibraryNames]'
                             + ' [cmdLineOptions.DelayLoadedDLLs]'
+                            + ' [cmdLineOptions.EmbedResources]'
+                            // Input files
+                            // ---------------------------
+                            + ' ""%1""'
                             // Manifest
                             // ---------------------------
                             + ' [cmdLineOptions.GenerateManifest]'
@@ -207,6 +212,18 @@ Compiler( '[fastbuildCompilerName]' )
                 public static string ResourceCompilerExtraOptions = @"
     .ResourceCompilerExtraOptions   = ' /l 0x0409 /nologo'
                                     + ' [cmdLineOptions.AdditionalResourceIncludeDirectories]'
+";
+
+                public static string EmbeddedResourceCompilerOptions = @"
+    // Resource Compiler options
+    // -------------------------
+    .Compiler               = '[fastBuildEmbeddedResourceCompiler]'
+    .CompilerOutputPrefix   = '[fastBuildEmbeddedOutputPrefix]'
+    .CompilerOutputExtension= '.resources'
+    .CompilerOptions        = '/useSourcePath ""%1"" ""%2""'
+    .CompilerOutputPath     = '$Intermediate$'
+    .CompilerInputFiles     = [fastBuildEmbeddedResources]
+
 ";
 
                 public static string CompilerOptionsCommon = @"
@@ -311,6 +328,7 @@ Compiler( '[fastbuildCompilerName]' )
             + ' [cmdLineOptions.DisableLanguageExtensions]'
             + ' [cmdLineOptions.TreatWChar_tAsBuiltInType]'
             + ' [cmdLineOptions.ForceConformanceInForLoopScope]'
+            + ' [cmdLineOptions.RemoveUnreferencedCodeData]'
             + ' [cmdLineOptions.RuntimeTypeInfo]'
             + ' [cmdLineOptions.OpenMP]'
             + ' [cmdLineOptions.LanguageStandard]'
@@ -424,6 +442,7 @@ Copy( '[fastBuildCopyAlias]' )
                                 [fastBuildObjectListDependencies]
                                 '[fastBuildOutputFileShortName]_objects'
                               }
+    .LinkerAssemblyResources = { [fastBuildObjectListEmbeddedResources] }
     .LinkerOutput           = '[fastBuildLinkerOutputFile]'
     .LinkerLinkObjects      = [fastBuildLinkerLinkObjects]
     .LinkerStampExe         = '[fastBuildStampExecutable]'
@@ -435,6 +454,16 @@ Copy( '[fastBuildCopyAlias]' )
 // ObjectList [fastBuildOutputFileShortName]_resources
 //=================================================================================================================
 ObjectList( '[fastBuildOutputFileShortName]_resources' )
+{
+     [fastBuildUsingPlatformConfig]
+    .Intermediate           = '[cmdLineOptions.IntermediateDirectory]\'
+";
+
+                public static string EmbeddedResourcesBeginSection = @"
+//=================================================================================================================
+// ObjectList [fastBuildOutputFileShortName]_embedded
+//=================================================================================================================
+ObjectList( '[fastBuildOutputFileShortName]_embedded' )
 {
      [fastBuildUsingPlatformConfig]
     .Intermediate           = '[cmdLineOptions.IntermediateDirectory]\'
@@ -477,6 +506,22 @@ Exec( '[fastBuildPreBuildName]' )
 
 ";
 
+                public static string TestSection = @"
+//=================================================================================================================
+// Test [fastBuildTest]
+//=================================================================================================================
+Test( '[fastBuildTest]' )
+{
+  .TestExecutable        = '[fastBuildTestExecutable]'
+  .TestOutput            = '[fastBuildTestOutput]'
+  .TestArguments         = '[fastBuildTestArguments]'
+  .TestWorkingDir        = '[fastBuildTestWorkingDir]'
+  .TestTimeOut           =  [fastBuildTestTimeOut]
+  .TestAlwaysShowOutput  =  [fastBuildTestAlwaysShowOutput]
+}
+
+";
+
                 public static string UnityBeginSection = @"
 //=================================================================================================================
 // Master .bff Unity/Blob files (shared across configs)
@@ -487,12 +532,12 @@ Unity( '[unityFile.UnityName]' )
 {
     .UnityInputPath                     = [unityFile.UnityInputPath]
     .UnityInputExcludePath              = [unityFile.UnityInputExcludePath]
-    .UnityInputExcludePattern           = '[unityFile.UnityInputExcludePattern]'
-    .UnityInputPattern                  = '[unityFile.UnityInputPattern]'
+    .UnityInputExcludePattern           = [unityFile.UnityInputExcludePattern]
+    .UnityInputPattern                  = [unityFile.UnityInputPattern]
     .UnityInputPathRecurse              = '[unityFile.UnityInputPathRecurse]'
     .UnityInputFiles                    = [unityFile.UnityInputFiles]
     .UnityInputExcludedFiles            = [unityFile.UnityInputExcludedFiles]
-    .UnityInputObjectLists              = '[unityFile.UnityInputObjectLists]'
+    .UnityInputObjectLists              = [unityFile.UnityInputObjectLists]
     .UnityInputIsolateWritableFiles     =  [unityFile.UnityInputIsolateWritableFiles]
     .UnityInputIsolateWritableFilesLimit = [unityFile.UnityInputIsolateWritableFilesLimit]
     .UnityOutputPath                    = '[unityFile.UnityOutputPath]'
