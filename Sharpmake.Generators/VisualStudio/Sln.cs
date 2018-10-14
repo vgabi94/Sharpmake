@@ -353,18 +353,32 @@ namespace Sharpmake.Generators.VisualStudio
                     {
                         fileGenerator.Write(Template.Solution.ProjectBegin);
 
-                        if (fastBuildAllProjectForSolutionDependency != null)
+                        bool writeDependencyToFastBuildAll = (fastBuildAllProjectForSolutionDependency != null) &&
+                            resolvedProject.Configurations.Any(conf => conf.IsFastBuild && conf.Output == Project.Configuration.OutputType.Exe);
+
+                        if (resolvedProject.Dependencies.Count > 0 || writeDependencyToFastBuildAll)
                         {
-                            bool writeDependencyToFastBuildAll = resolvedProject.Configurations.Any(conf => conf.IsFastBuild && conf.Output == Project.Configuration.OutputType.Exe);
+                            fileGenerator.Write(Template.Solution.ProjectDependencyBegin);
+
                             if (writeDependencyToFastBuildAll)
                             {
-                                fileGenerator.Write(Template.Solution.ProjectDependencyBegin);
                                 using (fileGenerator.Declare("projectDependencyGuid", fastBuildAllProjectForSolutionDependency.UserData["Guid"]))
                                     fileGenerator.Write(Template.Solution.ProjectDependency);
-                                fileGenerator.Write(Template.Solution.ProjectSectionEnd);
                             }
-                        }
 
+                            foreach (Solution.ResolvedProject dependecy in resolvedProject.Dependencies)
+                            {
+                                // Check in case we have the fastBuildAll project among the dependencies and don't write it in case we do
+                                if (dependecy != fastBuildAllProjectForSolutionDependency || !writeDependencyToFastBuildAll)
+                                {
+                                    using (fileGenerator.Declare("projectDependencyGuid", dependecy.UserData["Guid"]))
+                                        fileGenerator.Write(Template.Solution.ProjectDependency);
+                                }
+                            }
+
+                            fileGenerator.Write(Template.Solution.ProjectSectionEnd);
+                        }
+                                                
                         fileGenerator.Write(Template.Solution.ProjectEnd);
                     }
                 }
